@@ -1,0 +1,9 @@
+{
+  "signs": [
+    "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+    "Space",
+    "Hi", "Hello", "Bye", "ThankYou", "Welcome", "Yes", "No", "Please", "Sorry", "Help", "Good", "Morning", "Night", "Love", "Water", "Food", "Name", "What", "Where", "When", "Why", "How", "You", "We", "They", "Me", "My", "Your", "Friend", "Family", "Home", "School", "Work", "Come", "Go", "Stop", "Wait", "Again", "Slow", "Understand", "DontUnderstand", "Deaf", "Hearing"
+  ],
+  "two_hands": true
+}

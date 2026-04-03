@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Vāgbodha — Where Silence Finds Its Voice. Sign language recognition for the Deaf and Hard of Hearing." />
+  <title>Vāgbodha — Where Silence Finds Its Voice</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Outfit:wght@300;400;500;600;700&family=Noto+Sans+Devanagari:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="container header-inner">
+      <a href="#" class="logo" aria-label="Vāgbodha home" data-tab="home">
+        <span class="logo-mark" aria-hidden="true">V</span>
+        <span>Vāgbodha</span>
+      </a>
+      <nav class="nav" aria-label="Main">
+        <a href="#home" class="nav-link active" data-tab="home">Home</a>
+        <a href="#education" class="nav-link" data-tab="education">Education</a>
+        <a href="#detector" class="nav-link" data-tab="detector">Detector</a>
+        <a href="#speech-to-sign" class="nav-link" data-tab="speech-to-sign">Speech to Sign</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <!-- HOME TAB -->
+    <section id="tab-home" class="tab-pane active">
+      <section class="hero">
+        <div class="container hero-inner">
+          <blockquote class="hero-quote" cite="https://www.nad.org">
+            Sign language is the noblest gift God has given to deaf people.
+          </blockquote>
+          <h1 class="hero-title">
+            <span class="hero-title-line">Where Silence</span>
+            <span class="hero-title-line">Finds Its Voice</span>
+          </h1>
+          <p class="hero-subtitle">
+            Vāgbodha turns sign language into text and speech — for the Deaf and Hard of Hearing. Recognise A–Z, 0–9, and common words in real time. ISL &amp; ASL, one or two hands, TTS, and braille-style vibrations.
+          </p>
+          <a href="#detector" class="btn btn-primary btn-hero" data-tab="detector">Start signing</a>
+        </div>
+        <div class="hero-shape" aria-hidden="true"></div>
+      </section>
+
+      <section id="about" class="section section-about">
+        <div class="container">
+          <h2 class="section-title">Why sign language matters</h2>
+          <p class="section-quote">Hands are the voice of the deaf.</p>
+          <div class="cards">
+            <article class="card card-1">
+              <div class="card-icon" aria-hidden="true"><span class="card-icon-text">I</span></div>
+              <h3>Inclusion</h3>
+              <p>Sign language is a full, natural language. Using it helps include Deaf and mute people in conversation, education, and work.</p>
+            </article>
+            <article class="card card-2">
+              <div class="card-icon" aria-hidden="true"><span class="card-icon-text">L</span></div>
+              <h3>Learning</h3>
+              <p>Families and friends can learn signs to communicate with loved ones. Kids can practise letters and numbers in a fun way.</p>
+            </article>
+            <article class="card card-3">
+              <div class="card-icon" aria-hidden="true"><span class="card-icon-text">V</span></div>
+              <h3>Voice</h3>
+              <p>See the sign you make, get it as text, hear it spoken in English, Hindi, or Marathi, and feel braille-style vibrations.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="how-it-works" class="section section-how">
+        <div class="container">
+          <h2 class="section-title">How it works</h2>
+          <ol class="steps">
+            <li class="step"><span class="step-num" aria-hidden="true">1</span> Open the <strong>Detector</strong> tab and allow camera access.</li>
+            <li class="step"><span class="step-num" aria-hidden="true">2</span> Show one or two hands — letters A–Z, numbers 0–9, or words like Hello, Thank you.</li>
+            <li class="step"><span class="step-num" aria-hidden="true">3</span> The sign appears in the output box; use <strong>Next word</strong> to speak it and start the next.</li>
+          </ol>
+        </div>
+      </section>
+    </section>
+
+    <!-- EDUCATION TAB -->
+    <section id="tab-education" class="tab-pane">
+      <section class="section section-education">
+        <div class="container">
+          <h2 class="section-title">Sign reference (ASL / ISL)</h2>
+          <p class="section-desc">Letters, numbers, and common words. Add your own images in <code>static/education/</code> (e.g. A.png, Hello.png) to show next to each sign.</p>
+          <div id="sign-grid" class="sign-grid"></div>
+        </div>
+      </section>
+      <div class="chatbox-wrap">
+        <div class="chatbox-header">Sign language chatbot — ask about ASL/ISL</div>
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="chatbox-input-wrap">
+          <input type="text" id="chat-input" class="chat-input" placeholder="Ask about sign language (e.g. How do I sign Thank you?)" aria-label="Chat message" />
+          <button type="button" id="chat-send" class="btn btn-chat-send">Send</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- DETECTOR TAB (full screen + output below) -->
+    <section id="tab-detector" class="tab-pane">
+      <div class="detector-full">
+        <p id="secure-warning" class="secure-warning hidden" role="alert">
+          Camera works only on a secure page. Run <code>python app.py</code> and open <strong>http://127.0.0.1:5000</strong> in this browser.
+        </p>
+        <button type="button" id="btn-cam" class="btn btn-cam">Open camera and sign</button>
+        <div id="cam-section" class="cam-section hidden detector-cam-section">
+          <div class="detector-video-wrap">
+            <video id="video" class="video detector-video" playsinline muted aria-label="Camera feed"></video>
+            <canvas id="canvas" class="canvas detector-canvas" aria-hidden="true"></canvas>
+            <p id="cam-status" class="cam-status">Camera starting…</p>
+          </div>
+          <div class="detector-output-area">
+            <div class="try-controls try-controls-inline">
+              <label class="label-lang">Show result in:</label>
+              <select id="lang" class="select-lang" aria-label="Output language">
+                <option value="en">English</option>
+                <option value="hi">हिंदी (Hindi)</option>
+                <option value="mr">मराठी (Marathi)</option>
+              </select>
+              <button type="button" id="btn-tts" class="btn btn-tts">Speak word</button>
+              <button type="button" id="btn-next-word" class="btn btn-next-word">Next word (speak &amp; clear)</button>
+              <label class="vibrate-label" title="On phones: vibration. On desktop: short flash on the output box."><input type="checkbox" id="braille-vibrate" checked /> Braille vibration</label>
+            </div>
+            <div class="output-wrap">
+              <label for="output-box" class="output-label">Detected sign</label>
+              <div id="output-box" class="output-box detector-output-box" role="status" aria-live="polite">
+                <span id="output-text" class="output-text">—</span>
+                <span id="output-confidence" class="output-confidence" aria-hidden="true"></span>
+              </div>
+            </div>
+            <div class="sentence-wrap">
+              <label class="output-label">Your sentence</label>
+              <div id="sentence-box" class="sentence-box" role="status" aria-live="polite">—</div>
+              <div class="sentence-actions">
+                <button type="button" id="btn-speak-sentence" class="btn btn-tts">Speak sentence</button>
+                <button type="button" id="btn-clear-sentence" class="btn btn-clear">Clear</button>
+              </div>
+            </div>
+            <button type="button" id="btn-stop" class="btn btn-stop">Stop camera</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SPEECH TO SIGN TAB (speech → text → ISL images/GIFs) -->
+    <section id="tab-speech-to-sign" class="tab-pane">
+      <section class="section section-speech-to-sign">
+        <div class="container container-speech-to-sign">
+          <header class="speech-to-sign-header">
+            <h2 class="speech-to-sign-title">Speech to Indian Sign Language</h2>
+            <p class="speech-to-sign-tagline">Your voice becomes sign</p>
+          </header>
+          <div class="speech-to-sign-controls">
+            <button type="button" id="btn-speech-record" class="btn btn-primary">Start listening</button>
+            <button type="button" id="btn-speech-stop" class="btn btn-stop hidden">Stop</button>
+            <p id="speech-status" class="speech-status" role="status">Click &quot;Start listening&quot; and allow microphone, then speak.</p>
+          </div>
+          <div class="speech-result-wrap">
+            <label class="output-label">You said</label>
+            <div id="speech-text" class="speech-text">—</div>
+          </div>
+          <div class="isl-display-wrap">
+            <label class="output-label">ISL signs (in order)</label>
+            <div id="isl-display" class="isl-display" aria-live="polite"></div>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p><strong>Vāgbodha</strong> — Where Silence Finds Its Voice.</p>
+    </div>
+  </footer>
+
+  <script src="/js/translations.js"></script>
+  <script src="/js/braille-vibrations.js"></script>
+  <script src="/js/app.js"></script>
+  <script src="/js/tabs-and-education.js"></script>
+  <script src="/js/speech-to-sign.js"></script>
+</body>
+</html>
