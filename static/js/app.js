@@ -18,6 +18,7 @@
   const btnClearSentence = document.getElementById("btn-clear-sentence");
   const btnNextWord = document.getElementById("btn-next-word");
   const brailleCheck = document.getElementById("braille-vibrate");
+  const suggestionList = document.getElementById("suggestion-list");
 
   // Camera only works over HTTPS or localhost (secure context)
   function canUseCamera() {
@@ -28,23 +29,54 @@
 
   let stream = null;
   let animationId = null;
+  let cameraRunning = false;
   let lastSign = null;
   let lastConf = 0;
-  const SEND_INTERVAL_MS = 120;
-  const MIN_CONF = 0.48;          // Only accept a sign when confidence is decent (reduces wrong detections)
-  const MIN_CONF_SPACE = 0.78;    // Space must have very high confidence — no space until you actually show Space
-  const MIN_STABLE_COUNT = 4;     // Sign must appear in 4 of last 6 frames before we commit (hold sign clearly)
+  const SEND_INTERVAL_MS = 140;
+  const MIN_CONF = 0.55;
+  const MIN_CONF_SPACE = 0.82;
+  const MIN_STABLE_COUNT = 4;
   let lastSendTime = 0;
-  const SMOOTH_COUNT = 6;
-  const SPACE_REQUIRED_COUNT = 6; // Space must appear in ALL 6 frames (only then add space between words)
-  const SPACE_MUST_LEAD_BY = 4;   // Space must beat the next sign by at least this many (no tie with other signs)
+  const SMOOTH_COUNT = 7;
+  const SPACE_REQUIRED_COUNT = 6;
+  const SPACE_MUST_LEAD_BY = 4;
   let recentPredictions = [];
   let sentenceWords = [];
   let currentWord = [];
   let logicalSentence = null;
   let lastAddedSign = null;
   let lastSpaceCommitTime = 0;
-  const SPACE_COOLDOWN_MS = 800;  // After committing Space, ignore Space for this long (avoid double space)
+  const SPACE_COOLDOWN_MS = 900;
+
+  const WORD_SUGGESTIONS = [
+    "HELLO", "HELP", "HOME", "HOUSE", "HOW", "GOOD", "MORNING", "NIGHT", "NAME",
+    "PLEASE", "SORRY", "THANK YOU", "WELCOME", "WATER", "FOOD", "FRIEND",
+    "FAMILY", "SCHOOL", "WORK", "LOVE", "YES", "NO", "WAIT", "STOP", "GO", "COME"
+  ];
+
+  const SENTENCE_SUGGESTIONS = [
+    "HELLO HOW ARE YOU",
+    "PLEASE HELP ME",
+    "WHAT IS YOUR NAME",
+    "I NEED WATER",
+    "I NEED FOOD",
+    "GOOD MORNING",
+    "THANK YOU",
+    "PLEASE WAIT",
+    "I LOVE MY FAMILY",
+    "WHERE IS MY FRIEND",
+    "I DO NOT UNDERSTAND",
+    "I WANT TO GO HOME"
+  ];
+
+  const STARTER_SUGGESTIONS = [
+    "HELLO",
+    "PLEASE HELP ME",
+    "WHAT IS YOUR NAME",
+    "I NEED WATER",
+    "THANK YOU",
+    "GOOD MORNING"
+  ];
 
   function setStatus(msg) {
     camStatus.textContent = msg;
@@ -59,10 +91,96 @@
     return currentWord.map(function (s) { return String(s).replace(/\s+/g, ""); }).join("");
   }
 
+  function currentSentenceText() {
+    const sentence = sentenceWords.join(" ");
+    const current = currentWordSegment();
+    return sentence + (sentence && current ? " " : "") + current;
+  }
+
+  function isSingleCharacterSign(sign) {
+    return /^[A-Z0-9]$/.test(String(sign || "").trim());
+  }
+
+  function displayForSign(sign) {
+    const display = typeof getDisplaySign !== "undefined" ? getDisplaySign(sign, getLang()) : sign;
+    return String(display || "").trim();
+  }
+
+  function renderSuggestions() {
+    if (!suggestionList) return;
+    const current = currentWordSegment().toUpperCase();
+    const fullText = currentSentenceText().toUpperCase().trim();
+    const suggestions = [];
+
+    if (!current && !fullText) {
+      STARTER_SUGGESTIONS.forEach(function (value) {
+        suggestions.push({ kind: value.indexOf(" ") === -1 ? "word" : "sentence", value: value });
+      });
+    }
+
+    if (current) {
+      WORD_SUGGESTIONS.forEach(function (word) {
+        if (word.replace(/\s+/g, "").startsWith(current.replace(/\s+/g, "")) && word !== current) {
+          suggestions.push({ kind: "word", value: word });
+        }
+      });
+
+      if (suggestions.length < 3) {
+        WORD_SUGGESTIONS.forEach(function (word) {
+          if (word.indexOf(current[0]) === 0 && word !== current) {
+            suggestions.push({ kind: "word", value: word });
+          }
+        });
+      }
+    }
+
+    if (fullText) {
+      SENTENCE_SUGGESTIONS.forEach(function (sentence) {
+        if (sentence.startsWith(fullText) && sentence !== fullText) {
+          suggestions.push({ kind: "sentence", value: sentence });
+        }
+      });
+    }
+
+    const unique = [];
+    suggestions.forEach(function (item) {
+      if (!unique.some(function (existing) { return existing.kind === item.kind && existing.value === item.value; })) {
+        unique.push(item);
+      }
+    });
+
+    if (!unique.length) {
+      suggestionList.innerHTML = '<p class="suggestion-empty">Show signs to get word and sentence suggestions.</p>';
+      return;
+    }
+
+    suggestionList.innerHTML = unique.slice(0, 6).map(function (item) {
+      return '<button type="button" class="suggestion-chip" data-kind="' +
+        item.kind + '" data-value="' + item.value.replace(/"/g, "&quot;") + '">' +
+        item.value + '</button>';
+    }).join("");
+  }
+
+  function applySuggestion(kind, value) {
+    if (!value) return;
+    const cleanValue = value.trim();
+    if (kind === "sentence") {
+      sentenceWords = cleanValue.split(/\s+/);
+      currentWord = [];
+    } else {
+      currentWord = [];
+      if (!sentenceWords.length || sentenceWords[sentenceWords.length - 1] !== cleanValue) {
+        sentenceWords.push(cleanValue);
+      }
+    }
+    lastAddedSign = null;
+    updateSentenceDisplay();
+  }
+
   function showOutput(sign, confidence) {
     const lang = getLang();
     const display = typeof getDisplaySign !== "undefined" ? getDisplaySign(sign, lang) : sign;
-    outputText.textContent = display || "—";
+    outputText.textContent = display || "-";
     outputText.classList.toggle("pop", !!sign && sign !== lastSign);
 
     var isSpace = sign && sign.toLowerCase() === "space";
@@ -84,7 +202,15 @@
         logicalSentence = null;
         updateSentenceDisplay();
       } else if (!isSpace && confOkForLetter) {
-        currentWord.push(display);
+        const cleanDisplay = displayForSign(sign);
+        if (isSingleCharacterSign(sign)) {
+          currentWord.push(cleanDisplay);
+        } else {
+          const pendingWord = currentWordSegment();
+          if (pendingWord) sentenceWords.push(pendingWord);
+          sentenceWords.push(cleanDisplay);
+          currentWord = [];
+        }
         lastAddedSign = sign;
         logicalSentence = null;
         updateSentenceDisplay();
@@ -129,23 +255,20 @@
 
   function speakCurrent() {
     var text = outputText.textContent;
-    if (!text || text === "—") return;
+    if (!text || text === "-") return;
     doSpeak(text, getLang());
   }
 
   function updateSentenceDisplay() {
     if (!sentenceBox) return;
-    const sentence = sentenceWords.join(" ");
-    const current = currentWordSegment();
-    const displayText = sentence + (sentence && current ? " " : "") + current;
-    sentenceBox.textContent = displayText || "—";
+    const displayText = currentSentenceText();
+    sentenceBox.textContent = displayText || "-";
     sentenceBox.classList.toggle("empty", !displayText);
+    renderSuggestions();
   }
 
   function speakSentence() {
-    const sentence = sentenceWords.join(" ");
-    const current = currentWordSegment();
-    const textToSpeak = sentence + (sentence && current ? " " : "") + current;
+    const textToSpeak = currentSentenceText();
     if (!textToSpeak || !textToSpeak.trim()) return;
     doSpeak(textToSpeak, getLang());
   }
@@ -297,6 +420,8 @@
       .getUserMedia({ video: { width: 640, height: 480 }, audio: false })
       .then((s) => {
         stream = s;
+        cameraRunning = true;
+        btnCam.textContent = "Stop Camera";
         video.srcObject = s;
         video.onloadedmetadata = function onMeta() {
           video.play().then(function () {
@@ -339,13 +464,30 @@
       stream.getTracks().forEach((t) => t.stop());
       stream = null;
     }
+    cameraRunning = false;
+    btnCam.textContent = "Start Camera";
     video.srcObject = null;
-    camSection.classList.add("hidden");
+    video.removeAttribute("src");
+    video.load();
+    if (ctx && canvas) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+    recentPredictions = [];
+    lastSign = null;
+    lastConf = 0;
+    showOutput(null, 0);
+    if (camStatus) setStatus("Camera stopped. Press Start Camera to begin again.");
     btnCam.focus();
   }
 
   btnCam.addEventListener("click", function () {
     if (!camSection || !camStatus) return;
+    if (cameraRunning || stream) {
+      stopCamera();
+      return;
+    }
     camSection.classList.remove("hidden");
     camStatus.setAttribute("role", "status");
     camStatus.textContent = "Opening…";
@@ -364,6 +506,13 @@
 
   if (btnSpeakSentence) btnSpeakSentence.addEventListener("click", speakSentence);
   if (btnClearSentence) btnClearSentence.addEventListener("click", clearSentence);
+  if (suggestionList) {
+    suggestionList.addEventListener("click", function (event) {
+      const chip = event.target.closest(".suggestion-chip");
+      if (!chip) return;
+      applySuggestion(chip.getAttribute("data-kind"), chip.getAttribute("data-value"));
+    });
+  }
 
   function nextWord() {
     var word = currentWordSegment();
@@ -404,3 +553,4 @@
     }
   })();
 })();
+

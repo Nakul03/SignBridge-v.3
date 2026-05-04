@@ -132,7 +132,9 @@ def predict():
         if _scaler is not None:
             X = _scaler.transform(X)
         proba = _model.predict_proba(X)[0]
-        idx = int(np.argmax(proba))
+        ranked_idx = np.argsort(proba)[::-1]
+        idx = int(ranked_idx[0])
+        runner_up = float(proba[int(ranked_idx[1])]) if len(ranked_idx) > 1 else 0.0
         # Map probability index to class label (model may have fewer classes than full class_names)
         if hasattr(_model, "classes_") and _model.classes_ is not None:
             classes_arr = np.asarray(_model.classes_)
@@ -144,19 +146,30 @@ def predict():
         if class_label < 0 or class_label >= len(_class_names):
             return jsonify({"sign": None, "confidence": 0.0})
         confidence = float(proba[idx])
-        # Don't return low-confidence guesses — reduces inaccurate results
-        MIN_CONFIDENCE = 0.45
-        MIN_CONFIDENCE_SPACE = 0.78  # Only return Space when very confident (same as frontend — no space unless you show Space)
-        if confidence < MIN_CONFIDENCE:
-            return jsonify({"sign": None, "confidence": confidence})
+        candidates = []
+        if hasattr(_model, "classes_") and _model.classes_ is not None:
+            classes_arr = np.asarray(_model.classes_)
+            for i in ranked_idx[:3]:
+                label = int(classes_arr[int(i)])
+                if 0 <= label < len(_class_names):
+                    candidates.append({
+                        "sign": str(_class_names[label]).strip(),
+                        "confidence": float(proba[int(i)]),
+                    })
+        # Return only confident, clearly separated predictions to reduce random guesses.
+        MIN_CONFIDENCE = 0.55
+        MIN_MARGIN = 0.12
+        MIN_CONFIDENCE_SPACE = 0.82
+        if confidence < MIN_CONFIDENCE or (confidence - runner_up) < MIN_MARGIN:
+            return jsonify({"sign": None, "confidence": confidence, "candidates": candidates})
         sign = _class_names[class_label]
         # Ensure sign is always a string (digits "0"-"9", "Space", words like "Hello")
         sign = str(sign).strip() if sign is not None else None
         if sign and sign.lower() == "space":
             if confidence < MIN_CONFIDENCE_SPACE:
-                return jsonify({"sign": None, "confidence": confidence})
+                return jsonify({"sign": None, "confidence": confidence, "candidates": candidates})
             sign = "Space"
-        return jsonify({"sign": sign, "confidence": confidence})
+        return jsonify({"sign": sign, "confidence": confidence, "candidates": candidates})
     except Exception as e:
         app.logger.exception("Predict failed")
         return jsonify({"error": str(e), "sign": None, "confidence": 0.0}), 500
