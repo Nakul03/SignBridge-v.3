@@ -13,6 +13,9 @@ import cv2
 
 from flask import Flask, request, jsonify, send_from_directory
 
+_model_loaded = load_model()
+print(" Model init status:", _model_loaded)
+
 # Project root (parent of app.py)
 ROOT = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(ROOT, "sign_data")
@@ -248,6 +251,12 @@ def chat():
     except Exception as e:
         return jsonify({"reply": "", "error": str(e)})
 
+mp.solutions.hands.Hands(
+    static_image_mode=False,
+    max_num_hands=2,
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.5
+)
 
 if __name__ == "__main__":
     print("Loading sign language model...")
@@ -256,3 +265,4 @@ if __name__ == "__main__":
     else:
         print("WARNING: Model not found. Run collect_data.py and train_model.py first.")
     app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
+
