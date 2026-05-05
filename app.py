@@ -16,7 +16,7 @@ import time
 from flask import Flask, request, jsonify, send_from_directory
 
 _last_request_time = 0
-MIN_INTERVAL = 1.0  # seconds (1 request/sec)
+MIN_INTERVAL = 0.5  # seconds (1 request/sec)
 
 # Project root (parent of app.py)
 ROOT = os.path.dirname(os.path.abspath(__file__))
