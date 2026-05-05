@@ -11,8 +11,12 @@ import threading
 import numpy as np
 import cv2
 import mediapipe as mp
+import time
 
 from flask import Flask, request, jsonify, send_from_directory
+
+_last_request_time = 0
+MIN_INTERVAL = 1.0  # seconds (1 request/sec)
 
 # Project root (parent of app.py)
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -107,16 +111,27 @@ def speech_to_sign_words(filename):
 
 @app.route("/api/predict", methods=["POST"])
 def predict():
+    global _last_request_time
+
     try:
-        print("Request received")
+        print("PREDICT HIT")  # 👈 IMPORTANT
+
+        # -------- Rate limiting --------
+        current_time = time.time()
+        if current_time - _last_request_time < MIN_INTERVAL:
+            print("Too many requests")
+            return jsonify({"error": "Too many requests"}), 429
+        _last_request_time = current_time
 
         global _model, _scaler, _class_names, _two_hands, _detector
 
         if _model is None or _detector is None:
+            print("Model not loaded")
             return jsonify({"error": "Model not loaded"}), 503
 
         data = request.get_json()
         if not data or "image" not in data:
+            print("No image received")
             return jsonify({"error": "No image"}), 400
 
         # -------- Decode image --------
@@ -129,9 +144,12 @@ def predict():
         frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
 
         if frame is None:
+            print("Invalid image decode")
             return jsonify({"error": "Invalid image"}), 400
 
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+        print("Image decoded successfully")
 
         # -------- Process frame --------
         from sign_language.hands import process_frame
@@ -139,15 +157,18 @@ def predict():
 
         with _predict_lock:
             lm_list, hand_list = process_frame(_detector, rgb)
+            print("Landmarks:", lm_list)
+
             feats = extract_landmark_features_from_lists(
                 lm_list, hand_list, two_hands=_two_hands
             )
 
         if feats is None:
+            print("No features extracted")
             return jsonify({"sign": None, "confidence": 0.0})
 
-        # -------- Prediction --------
         X = feats.reshape(1, -1)
+        print("Feature shape:", X.shape)
 
         if _scaler is not None:
             X = _scaler.transform(X)
@@ -158,7 +179,7 @@ def predict():
 
         sign = str(_class_names[idx]).strip()
 
-        print("Prediction success:", sign, confidence)
+        print("Prediction:", sign, confidence)
 
         return jsonify({
             "sign": sign,
@@ -166,7 +187,7 @@ def predict():
         })
 
     except Exception as e:
-        print("ERROR:", str(e))
+        print("🔥 ERROR:", str(e))
         return jsonify({
             "error": str(e),
             "sign": None,
