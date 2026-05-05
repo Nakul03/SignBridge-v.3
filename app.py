@@ -13,9 +13,6 @@ import cv2
 
 from flask import Flask, request, jsonify, send_from_directory
 
-_model_loaded = load_model()
-print(" Model init status:", _model_loaded)
-
 # Project root (parent of app.py)
 ROOT = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(ROOT, "sign_data")
@@ -69,6 +66,8 @@ def load_model():
         traceback.print_exc()
         return False
 
+_model_loaded = load_model()
+print(" Model init status:", _model_loaded)
 
 @app.route("/")
 def index():
