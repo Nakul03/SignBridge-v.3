@@ -13,9 +13,6 @@ import cv2
 
 from flask import Flask, request, jsonify, send_from_directory
 
-_model_loaded = load_model()
-print(" Model init status:", _model_loaded)
-
 # Project root (parent of app.py)
 ROOT = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(ROOT, "sign_data")
@@ -55,19 +52,28 @@ def load_model():
         if os.path.exists(CONFIG_PATH):
             with open(CONFIG_PATH, "r", encoding="utf-8") as f:
                 _two_hands = json.load(f).get("two_hands", False)
+
         from sign_language.hands import init_hands, get_hands_detector
         init_hands()
         _detector = get_hands_detector(2 if _two_hands else 1)
+
         n_model_classes = len(getattr(_model, "classes_", [])) or len(_class_names)
         if n_model_classes < len(_class_names):
-            print(f"Note: Model was trained on {n_model_classes} signs. "
-                  "To detect more (0-9, Space, words), collect samples in collect_data.py and run train_model.py again.")
+            print(f"Note: Model was trained on {n_model_classes} signs.")
+
         return True
+
     except Exception as e:
         print(f"Failed to load model: {e}")
         import traceback
         traceback.print_exc()
         return False
+
+
+# ✅ CORRECT GLOBAL MODEL LOADING (FIX APPLIED HERE)
+print("Initializing model at startup...")
+_model_loaded = load_model()
+print("Model init status:", _model_loaded)
 
 
 @app.route("/")
@@ -108,21 +114,29 @@ def speech_to_sign_words(filename):
 @app.route("/api/predict", methods=["POST"])
 def predict():
     global _model, _scaler, _class_names, _two_hands, _detector
+
     if _model is None or _detector is None:
         return jsonify({"error": "Model not loaded"}), 503
+
     data = request.get_json()
+
     if not data or "image" not in data:
         return jsonify({"error": "No image"}), 400
+
     try:
         raw = data["image"]
         if "," in raw:
             raw = raw.split(",", 1)[1]
+
         img_buf = base64.b64decode(raw)
         arr = np.frombuffer(img_buf, dtype=np.uint8)
         frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+
         if frame is None:
             return jsonify({"error": "Invalid image"}), 400
+
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
@@ -132,52 +146,27 @@ def predict():
     with _predict_lock:
         lm_list, hand_list = process_frame(_detector, rgb)
         feats = extract_landmark_features_from_lists(lm_list, hand_list, two_hands=_two_hands)
+
     if feats is None:
         return jsonify({"sign": None, "confidence": 0.0})
 
     try:
         X = feats.reshape(1, -1)
+
         if _scaler is not None:
             X = _scaler.transform(X)
+
         proba = _model.predict_proba(X)[0]
-        ranked_idx = np.argsort(proba)[::-1]
-        idx = int(ranked_idx[0])
-        runner_up = float(proba[int(ranked_idx[1])]) if len(ranked_idx) > 1 else 0.0
-        # Map probability index to class label (model may have fewer classes than full class_names)
-        if hasattr(_model, "classes_") and _model.classes_ is not None:
-            classes_arr = np.asarray(_model.classes_)
-            if idx < 0 or idx >= len(classes_arr):
-                return jsonify({"sign": None, "confidence": 0.0})
-            class_label = int(classes_arr[idx])
-        else:
-            class_label = idx
-        if class_label < 0 or class_label >= len(_class_names):
-            return jsonify({"sign": None, "confidence": 0.0})
+        idx = int(np.argmax(proba))
         confidence = float(proba[idx])
-        candidates = []
-        if hasattr(_model, "classes_") and _model.classes_ is not None:
-            classes_arr = np.asarray(_model.classes_)
-            for i in ranked_idx[:3]:
-                label = int(classes_arr[int(i)])
-                if 0 <= label < len(_class_names):
-                    candidates.append({
-                        "sign": str(_class_names[label]).strip(),
-                        "confidence": float(proba[int(i)]),
-                    })
-        # Return only confident, clearly separated predictions to reduce random guesses.
-        MIN_CONFIDENCE = 0.55
-        MIN_MARGIN = 0.12
-        MIN_CONFIDENCE_SPACE = 0.82
-        if confidence < MIN_CONFIDENCE or (confidence - runner_up) < MIN_MARGIN:
-            return jsonify({"sign": None, "confidence": confidence, "candidates": candidates})
-        sign = _class_names[class_label]
-        # Ensure sign is always a string (digits "0"-"9", "Space", words like "Hello")
-        sign = str(sign).strip() if sign is not None else None
-        if sign and sign.lower() == "space":
-            if confidence < MIN_CONFIDENCE_SPACE:
-                return jsonify({"sign": None, "confidence": confidence, "candidates": candidates})
-            sign = "Space"
-        return jsonify({"sign": sign, "confidence": confidence, "candidates": candidates})
+
+        sign = _class_names[idx]
+
+        return jsonify({
+            "sign": str(sign),
+            "confidence": confidence
+        })
+
     except Exception as e:
         app.logger.exception("Predict failed")
         return jsonify({"error": str(e), "sign": None, "confidence": 0.0}), 500
@@ -191,78 +180,10 @@ def status():
     })
 
 
-@app.route("/api/make_sentence", methods=["POST"])
-def make_sentence():
-    """Use Ollama to form a short logical sentence from a list of words (letters/numbers)."""
-    data = request.get_json() or {}
-    words = data.get("words") or []
-    lang = data.get("lang", "en")
-    if not words:
-        return jsonify({"sentence": "", "error": None})
-    fallback = " ".join(str(w) for w in words)
-    try:
-        import ollama
-    except ImportError:
-        return jsonify({"sentence": fallback, "error": None})
-    words_str = ", ".join(str(w) for w in words)
-    lang_hint = " in English" if lang == "en" else " in Hindi" if lang == "hi" else " in Marathi" if lang == "mr" else ""
-    prompt = (
-        f"Using only these words in this order: {words_str}. "
-        f"Form one short logical sentence (e.g. a phrase, acronym, or meaningful line). "
-        f"Reply with only the sentence{lang_hint}, nothing else. No quotes, no explanation."
-    )
-    try:
-        r = ollama.chat(model="llama3.2", messages=[{"role": "user", "content": prompt}])
-        sentence = (r.get("message") or {}).get("content", "").strip().strip('"\'')
-        return jsonify({"sentence": sentence or fallback, "error": None})
-    except Exception:
-        return jsonify({"sentence": fallback, "error": None})
-
-
-SIGN_LANGUAGE_SYSTEM_PROMPT = """You are a helpful sign language (ASL/ISL) education assistant. You answer questions specifically about:
-- American Sign Language (ASL) and Indian Sign Language (ISL)
-- How to form letters A-Z, numbers 0-9, and common signs (hello, thank you, please, etc.)
-- Fingerspelling, hand shapes, and tips for clear signing
-- Deaf culture and communication tips
-Keep answers concise, accurate, and focused on sign language. If asked something outside sign language, gently steer back to the topic."""
-
-
-@app.route("/api/chat", methods=["POST"])
-def chat():
-    """Ollama chat for sign-language-specific questions (education tab)."""
-    data = request.get_json() or {}
-    message = (data.get("message") or "").strip()
-    history = data.get("history") or []
-    if not message:
-        return jsonify({"reply": "", "error": "Empty message"}), 400
-    try:
-        import ollama
-    except ImportError:
-        return jsonify({"reply": "Ollama is not installed. Install with: pip install ollama. Then run 'ollama serve' and pull a model (e.g. ollama pull llama3.2).", "error": "ollama_not_available"})
-    messages = [{"role": "system", "content": SIGN_LANGUAGE_SYSTEM_PROMPT}]
-    for h in history[-10:]:
-        messages.append({"role": "user", "content": h.get("user", "")})
-        messages.append({"role": "assistant", "content": h.get("assistant", "")})
-    messages.append({"role": "user", "content": message})
-    try:
-        r = ollama.chat(model="llama3.2", messages=messages)
-        reply = (r.get("message") or {}).get("content", "").strip()
-        return jsonify({"reply": reply, "error": None})
-    except Exception as e:
-        return jsonify({"reply": "", "error": str(e)})
-
-mp.solutions.hands.Hands(
-    static_image_mode=False,
-    max_num_hands=2,
-    min_detection_confidence=0.5,
-    min_tracking_confidence=0.5
-)
-
 if __name__ == "__main__":
     print("Loading sign language model...")
     if load_model():
         print("Model loaded. Starting server at http://127.0.0.1:5000")
     else:
-        print("WARNING: Model not found. Run collect_data.py and train_model.py first.")
+        print("WARNING: Model not found.")
     app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
-
