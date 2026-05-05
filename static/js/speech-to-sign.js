@@ -11,6 +11,8 @@
   var speechStatus = document.getElementById("speech-status");
   var speechText = document.getElementById("speech-text");
   var islDisplay = document.getElementById("isl-display");
+  var manualInput = document.getElementById("speech-manual-input");
+  var btnConvert = document.getElementById("btn-speech-convert");
 
   var islWords = {};
   var phraseKeys = [];
@@ -126,6 +128,17 @@
     showNextInQueue();
   }
 
+  function convertText(text) {
+    var clean = (text || "").trim();
+    if (!clean) {
+      setStatus("Type or speak something first.");
+      return;
+    }
+    if (speechText) speechText.textContent = clean;
+    setStatus("Converted text into ISL signs.");
+    showSignsForText(clean);
+  }
+
   function startListening() {
     var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -185,9 +198,17 @@
   }
 
   if (btnRecord) btnRecord.addEventListener("click", function () {
-    if (speechText) speechText.textContent = "—";
+    if (speechText) speechText.textContent = "-";
     if (islDisplay) islDisplay.innerHTML = "";
     startListening();
   });
   if (btnStop) btnStop.addEventListener("click", stopListening);
+  if (btnConvert) btnConvert.addEventListener("click", function () {
+    convertText(manualInput ? manualInput.value : "");
+  });
+  if (manualInput) {
+    manualInput.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") convertText(manualInput.value);
+    });
+  }
 })();

@@ -72,6 +72,11 @@ def index():
     return send_from_directory("static", "index.html")
 
 
+@app.route("/speech-to-sign")
+def speech_to_sign_page():
+    return send_from_directory("static", "speech-to-sign.html")
+
+
 @app.route("/data/sign-info.json")
 def sign_info():
     return send_from_directory("static", "data/sign-info.json")

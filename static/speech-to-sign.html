@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Sign Bridge speech to Indian Sign Language converter." />
+  <title>Speech to Sign | Sign Bridge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css?v=4" />
+</head>
+<body>
+  <main class="app-shell speech-page" id="main-content">
+    <header class="site-header" aria-label="Speech to sign page">
+      <p class="kicker">SPEECH TO SIGN</p>
+      <h1>Voice Into ISL</h1>
+      <p class="intro">Speak a phrase or type text manually. Sign Bridge matches full ISL GIFs first, then spells unknown words using letter images from the dataset.</p>
+      <a class="btn nav-button" href="/">Back to Detector</a>
+    </header>
+
+    <section class="speech-console" aria-label="Speech to Indian Sign Language converter">
+      <div class="monitor-top" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+
+      <div class="speech-controls">
+        <button type="button" id="btn-speech-record" class="btn btn-cam">Start Listening</button>
+        <button type="button" id="btn-speech-stop" class="btn btn-stop hidden">Stop Listening</button>
+        <p id="speech-status" class="speech-status" role="status">Click Start Listening and allow microphone access, or type below.</p>
+      </div>
+
+      <section class="manual-convert" aria-label="Manual text to sign">
+        <label class="output-label" for="speech-manual-input">Type Text</label>
+        <div class="manual-row">
+          <input id="speech-manual-input" class="speech-input" type="text" placeholder="Example: hello, good morning, what is your name" />
+          <button type="button" id="btn-speech-convert" class="btn">Convert</button>
+        </div>
+      </section>
+
+      <section class="speech-result-wrap" aria-label="Recognized speech">
+        <label class="output-label">You Said</label>
+        <div id="speech-text" class="speech-text">-</div>
+      </section>
+
+      <section class="isl-display-wrap" aria-label="Indian Sign Language output">
+        <label class="output-label">ISL Output</label>
+        <div id="isl-display" class="isl-display" aria-live="polite">
+          <p class="isl-empty">Your signs will appear here.</p>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="/js/speech-to-sign.js?v=2"></script>
+</body>
+</html>
