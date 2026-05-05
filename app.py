@@ -10,6 +10,7 @@ import pickle
 import threading
 import numpy as np
 import cv2
+import mediapipe as mp
 
 from flask import Flask, request, jsonify, send_from_directory
 
