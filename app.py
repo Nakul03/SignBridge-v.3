@@ -107,80 +107,71 @@ def speech_to_sign_words(filename):
 
 @app.route("/api/predict", methods=["POST"])
 def predict():
-    global _model, _scaler, _class_names, _two_hands, _detector
-    if _model is None or _detector is None:
-        return jsonify({"error": "Model not loaded"}), 503
-    data = request.get_json()
-    if not data or "image" not in data:
-        return jsonify({"error": "No image"}), 400
     try:
+        print("Request received")
+
+        global _model, _scaler, _class_names, _two_hands, _detector
+
+        if _model is None or _detector is None:
+            return jsonify({"error": "Model not loaded"}), 503
+
+        data = request.get_json()
+        if not data or "image" not in data:
+            return jsonify({"error": "No image"}), 400
+
+        # -------- Decode image --------
         raw = data["image"]
         if "," in raw:
             raw = raw.split(",", 1)[1]
+
         img_buf = base64.b64decode(raw)
         arr = np.frombuffer(img_buf, dtype=np.uint8)
         frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+
         if frame is None:
             return jsonify({"error": "Invalid image"}), 400
+
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
 
-    from sign_language.hands import process_frame
-    from sign_language.landmarks import extract_landmark_features_from_lists
+        # -------- Process frame --------
+        from sign_language.hands import process_frame
+        from sign_language.landmarks import extract_landmark_features_from_lists
 
-    with _predict_lock:
-        lm_list, hand_list = process_frame(_detector, rgb)
-        feats = extract_landmark_features_from_lists(lm_list, hand_list, two_hands=_two_hands)
-    if feats is None:
-        return jsonify({"sign": None, "confidence": 0.0})
+        with _predict_lock:
+            lm_list, hand_list = process_frame(_detector, rgb)
+            feats = extract_landmark_features_from_lists(
+                lm_list, hand_list, two_hands=_two_hands
+            )
 
-    try:
+        if feats is None:
+            return jsonify({"sign": None, "confidence": 0.0})
+
+        # -------- Prediction --------
         X = feats.reshape(1, -1)
+
         if _scaler is not None:
             X = _scaler.transform(X)
+
         proba = _model.predict_proba(X)[0]
-        ranked_idx = np.argsort(proba)[::-1]
-        idx = int(ranked_idx[0])
-        runner_up = float(proba[int(ranked_idx[1])]) if len(ranked_idx) > 1 else 0.0
-        # Map probability index to class label (model may have fewer classes than full class_names)
-        if hasattr(_model, "classes_") and _model.classes_ is not None:
-            classes_arr = np.asarray(_model.classes_)
-            if idx < 0 or idx >= len(classes_arr):
-                return jsonify({"sign": None, "confidence": 0.0})
-            class_label = int(classes_arr[idx])
-        else:
-            class_label = idx
-        if class_label < 0 or class_label >= len(_class_names):
-            return jsonify({"sign": None, "confidence": 0.0})
+        idx = int(np.argmax(proba))
         confidence = float(proba[idx])
-        candidates = []
-        if hasattr(_model, "classes_") and _model.classes_ is not None:
-            classes_arr = np.asarray(_model.classes_)
-            for i in ranked_idx[:3]:
-                label = int(classes_arr[int(i)])
-                if 0 <= label < len(_class_names):
-                    candidates.append({
-                        "sign": str(_class_names[label]).strip(),
-                        "confidence": float(proba[int(i)]),
-                    })
-        # Return only confident, clearly separated predictions to reduce random guesses.
-        MIN_CONFIDENCE = 0.55
-        MIN_MARGIN = 0.12
-        MIN_CONFIDENCE_SPACE = 0.82
-        if confidence < MIN_CONFIDENCE or (confidence - runner_up) < MIN_MARGIN:
-            return jsonify({"sign": None, "confidence": confidence, "candidates": candidates})
-        sign = _class_names[class_label]
-        # Ensure sign is always a string (digits "0"-"9", "Space", words like "Hello")
-        sign = str(sign).strip() if sign is not None else None
-        if sign and sign.lower() == "space":
-            if confidence < MIN_CONFIDENCE_SPACE:
-                return jsonify({"sign": None, "confidence": confidence, "candidates": candidates})
-            sign = "Space"
-        return jsonify({"sign": sign, "confidence": confidence, "candidates": candidates})
+
+        sign = str(_class_names[idx]).strip()
+
+        print("Prediction success:", sign, confidence)
+
+        return jsonify({
+            "sign": sign,
+            "confidence": confidence
+        })
+
     except Exception as e:
-        app.logger.exception("Predict failed")
-        return jsonify({"error": str(e), "sign": None, "confidence": 0.0}), 500
+        print("ERROR:", str(e))
+        return jsonify({
+            "error": str(e),
+            "sign": None,
+            "confidence": 0.0
+        }), 500
 
 
 @app.route("/api/status")
