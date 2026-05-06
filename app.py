@@ -116,29 +116,30 @@ def speech_to_sign_words(filename):
 
 @app.route("/api/predict", methods=["POST"])
 def predict():
-    global _last_processed_time
-
-    if not _lock.acquire(blocking=False):
-        # Already processing → ignore request silently
-        return jsonify({"sign": None, "confidence": 0.0})
+    global _last_request_time
 
     try:
+        print("PREDICT HIT")  # 👈 IMPORTANT
+
+        # -------- Rate limiting --------
         current_time = time.time()
+        if current_time - _last_request_time < MIN_INTERVAL:
+            print("Too many requests")
+            return jsonify({"error": "Too many requests"}), 429
+        _last_request_time = current_time
 
-        if current_time - _last_processed_time < PROCESS_INTERVAL:
-            # Skip processing but DO NOT throw error
-            return jsonify({"sign": None, "confidence": 0.0})
+        global _model, _scaler, _class_names, _two_hands, _detector
 
-        _last_processed_time = current_time
-
-        print("PREDICT PROCESSING")
-
-        # ---- your existing logic below ----
+        if _model is None or _detector is None:
+            print("Model not loaded")
+            return jsonify({"error": "Model not loaded"}), 503
 
         data = request.get_json()
         if not data or "image" not in data:
+            print("No image received")
             return jsonify({"error": "No image"}), 400
 
+        # -------- Decode image --------
         raw = data["image"]
         if "," in raw:
             raw = raw.split(",", 1)[1]
@@ -148,22 +149,31 @@ def predict():
         frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
 
         if frame is None:
+            print("Invalid image decode")
             return jsonify({"error": "Invalid image"}), 400
 
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
+        print("Image decoded successfully")
+
+        # -------- Process frame --------
         from sign_language.hands import process_frame
         from sign_language.landmarks import extract_landmark_features_from_lists
 
-        lm_list, hand_list = process_frame(_detector, rgb)
-        feats = extract_landmark_features_from_lists(
-            lm_list, hand_list, two_hands=_two_hands
-        )
+        with _predict_lock:
+            lm_list, hand_list = process_frame(_detector, rgb)
+            print("Landmarks:", lm_list)
+
+            feats = extract_landmark_features_from_lists(
+                lm_list, hand_list, two_hands=_two_hands
+            )
 
         if feats is None:
+            print("No features extracted")
             return jsonify({"sign": None, "confidence": 0.0})
 
         X = feats.reshape(1, -1)
+        print("Feature shape:", X.shape)
 
         if _scaler is not None:
             X = _scaler.transform(X)
@@ -171,6 +181,7 @@ def predict():
         proba = _model.predict_proba(X)[0]
         idx = int(np.argmax(proba))
         confidence = float(proba[idx])
+
         sign = str(_class_names[idx]).strip()
 
         print("Prediction:", sign, confidence)
@@ -181,11 +192,12 @@ def predict():
         })
 
     except Exception as e:
-        print("ERROR:", str(e))
-        return jsonify({"error": str(e)}), 500
-
-    finally:
-        _lock.release()
+        print("🔥 ERROR:", str(e))
+        return jsonify({
+            "error": str(e),
+            "sign": None,
+            "confidence": 0.0
+        }), 500
 
 
 @app.route("/api/status")
